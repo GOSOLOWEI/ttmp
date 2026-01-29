@@ -1,3 +1,4 @@
+import { env } from "../env";
 /**
  * 多厂商模型配置
  * 均使用 OpenAI 兼容 API，通过 baseURL + apiKey 区分
@@ -20,13 +21,6 @@ export interface ProviderConfig {
 
 /** 预置厂商配置 */
 export const PROVIDERS: Record<string, ProviderConfig> = {
-  openai: {
-    id: 'openai',
-    name: 'OpenAI',
-    defaultModel: 'gpt-4o-mini',
-    models: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-4', 'gpt-3.5-turbo'],
-    envKey: 'OPENAI_API_KEY',
-  },
   deepseek: {
     id: 'deepseek',
     name: 'DeepSeek',
@@ -39,8 +33,9 @@ export const PROVIDERS: Record<string, ProviderConfig> = {
     id: 'doubao',
     name: '豆包',
     baseURL: 'https://ark.cn-beijing.volces.com/api/v3',
-    defaultModel: 'doubao-pro-32k',
-    models: ['doubao-pro-32k', 'doubao-pro-4k', 'doubao-1-5-pro-32k'], // 以实际接入的模型名为准
+    defaultModel: 'ep-20260129162318-pm5jd',
+    // Doubao-Seed-1.8，thing-251104, 智能路由
+    models: ['ep-20260129162318-pm5jd', "ep-20260129162541-ngdv4","ep-20260120182539-s2942"], // 以实际接入的模型名为准
     envKey: 'DOUBAO_API_KEY',
   },
 } as const;

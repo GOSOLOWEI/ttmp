@@ -3,11 +3,17 @@
  * 与 OpenAI Chat Completions API 对齐，便于多厂商复用
  */
 
-export type MessageRole = 'system' | 'user' | 'assistant';
+export type MessageRole = 'system' | 'user' | 'assistant' | 'tool';
 
 export interface ChatMessage {
   role: MessageRole;
-  content: string;
+  content: string | null;
+  /** 用于 assistant 角色：模型生成的工具调用请求 */
+  tool_calls?: any[];
+  /** 用于 tool 角色：对应 tool_call 的 ID */
+  tool_call_id?: string;
+  /** 用于 tool 角色：工具执行的名称（可选） */
+  name?: string;
 }
 
 export interface ChatCompletionOptions {
@@ -19,12 +25,20 @@ export interface ChatCompletionOptions {
   temperature?: number;
   /** 流式输出 */
   stream?: boolean;
+  /** 工具定义 */
+  tools?: any[];
+  /** 工具选择策略 */
+  tool_choice?: 'none' | 'auto' | 'required' | { type: 'function'; function: { name: string } };
 }
 
 export interface ChatCompletionChunk {
   id: string;
   choices: Array<{
-    delta: { role?: MessageRole; content?: string };
+    delta: { 
+      role?: MessageRole; 
+      content?: string;
+      tool_calls?: any[];
+    };
     index: number;
     finish_reason: string | null;
   }>;

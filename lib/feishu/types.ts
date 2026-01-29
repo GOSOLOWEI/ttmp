@@ -39,3 +39,31 @@ export interface BitableOptions {
 }
 
 export type BitableFormatterType = 'json' | 'markdown' | 'text' | ((fields: Record<string, any>) => string);
+
+export interface JSSDKConfig {
+  appId: string;
+  timestamp: number;
+  nonceStr: string;
+  signature: string;
+}
+
+export interface FeishuUser {
+  open_id: string;
+  name: string;
+  en_name: string;
+  avatar_url: string;
+  avatar_thumb: string;
+  avatar_middle: string;
+  avatar_big: string;
+  union_id?: string;
+  user_id?: string;
+  mobile?: string;
+  email?: string;
+}
+
+export interface FeishuContextType {
+  user: FeishuUser | null;
+  isLark: boolean;
+  isReady: boolean;
+  login: () => Promise<void>;
+}

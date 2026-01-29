@@ -10,6 +10,9 @@ const envSchema = z.object({
   FEISHU_APP_ID: z.string().min(1, "缺少 FEISHU_APP_ID"),
   FEISHU_APP_SECRET: z.string().min(1, "缺少 FEISHU_APP_SECRET"),
   
+  // 暴露给前端的配置
+  NEXT_PUBLIC_FEISHU_APP_ID: z.string().min(1, "缺少 NEXT_PUBLIC_FEISHU_APP_ID").optional(),
+  
   // 飞书安全配置（可选，但在生产环境建议配置）
   FEISHU_ENCRYPT_KEY: z.string().optional(),
   FEISHU_VERIFICATION_TOKEN: z.string().optional(),
@@ -17,8 +20,15 @@ const envSchema = z.object({
   // 飞书域名配置，默认为飞书官网域名
   FEISHU_DOMAIN: z.string().default("https://open.feishu.cn"),
 
+  // JWT 密钥
+  JWT_SECRET: z.string().min(1, "缺少 JWT_SECRET"),
+
   // 运行环境
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
+
+  // 模型配置
+  DEEPSEEK_API_KEY: z.string().min(1, "缺少 DEEPSEEK_API_KEY"),
+  DOUBAO_API_KEY: z.string().min(1, "缺少 DOUBAO_API_KEY"),
 });
 
 // 解析环境变量

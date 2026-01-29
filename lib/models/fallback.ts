@@ -3,7 +3,7 @@
  * 与 ModelManager 解耦，通过传入 manager 实例使用
  */
 
-import type { ModelManager } from './manager';
+import { ModelManager } from './manager';
 import { type ProviderId } from './providers';
 import type {
   ChatMessage,
@@ -14,7 +14,7 @@ import type {
   StreamFallbackResult,
 } from './types';
 
-const DEFAULT_PROVIDER_ORDER: ProviderId[] = ['openai', 'deepseek', 'doubao'];
+const DEFAULT_PROVIDER_ORDER: ProviderId[] = [ 'deepseek', 'doubao'];
 
 /** 根据策略得到实际尝试的厂商顺序 */
 function getProviderOrder(

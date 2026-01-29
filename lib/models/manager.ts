@@ -76,9 +76,17 @@ export class ModelManager {
 
     const response = await client.chat.completions.create({
       model,
-      messages: messages.map((m) => ({ role: m.role, content: m.content })),
+      messages: messages.map((m) => ({ 
+        role: m.role, 
+        content: m.content,
+        tool_calls: m.tool_calls,
+        tool_call_id: m.tool_call_id,
+        name: m.name
+      }) as any),
       max_tokens: options.max_tokens,
       temperature: options.temperature,
+      tools: options.tools as any,
+      tool_choice: options.tool_choice as any,
       stream: false,
     });
 
@@ -88,7 +96,11 @@ export class ModelManager {
     return {
       id: response.id,
       choices: response.choices.map((c) => ({
-        message: { role: c.message!.role as ChatMessage['role'], content: c.message!.content ?? '' },
+        message: { 
+          role: c.message!.role as ChatMessage['role'], 
+          content: c.message!.content ?? '',
+          tool_calls: c.message!.tool_calls
+        },
         index: c.index,
         finish_reason: c.finish_reason,
       })),
@@ -114,9 +126,17 @@ export class ModelManager {
 
     const stream = await client.chat.completions.create({
       model,
-      messages: messages.map((m) => ({ role: m.role, content: m.content })),
+      messages: messages.map((m) => ({ 
+        role: m.role, 
+        content: m.content,
+        tool_calls: m.tool_calls,
+        tool_call_id: m.tool_call_id,
+        name: m.name
+      }) as any),
       max_tokens: options.max_tokens,
       temperature: options.temperature,
+      tools: options.tools as any,
+      tool_choice: options.tool_choice as any,
       stream: true,
     });
 
@@ -127,6 +147,7 @@ export class ModelManager {
           delta: {
             role: c.delta?.role as ChatMessage['role'] | undefined,
             content: c.delta?.content ?? undefined,
+            tool_calls: c.delta?.tool_calls as any,
           },
           index: c.index,
           finish_reason: c.finish_reason,

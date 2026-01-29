@@ -1,64 +1,55 @@
+"use client";
+
+import { useFeishu } from "@/components/FeishuProvider";
 import Image from "next/image";
 
 export default function Home() {
+  const { user, isLark, isReady } = useFeishu();
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black p-4">
+      <main className="flex flex-col items-center gap-6 text-center max-w-md w-full bg-white dark:bg-zinc-900 p-8 rounded-2xl shadow-sm">
+        <h1 className="text-3xl font-bold tracking-tight text-black dark:text-zinc-50">
+          Agent Modal
+        </h1>
+
+        <div className="space-y-4 w-full">
+          {!isLark ? (
+            <p className="text-orange-500 bg-orange-50 dark:bg-orange-900/20 p-3 rounded-lg text-sm">
+              请在飞书客户端内打开以体验免登功能
+            </p>
+          ) : !isReady ? (
+            <p className="text-zinc-500">飞书环境初始化中...</p>
+          ) : user ? (
+            <div className="flex flex-col items-center gap-4">
+              {user.avatar_url && (
+                <div className="relative w-20 h-20 rounded-full overflow-hidden border-2 border-blue-500 mx-auto">
+                  <Image
+                    src={user.avatar_url}
+                    alt={user.name}
+                    fill
+                    className="object-cover"
+                  />
+                </div>
+              )}
+              <div>
+                <h2 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100">
+                  你好, {user.name}
+                </h2>
+                <p className="text-sm text-zinc-500">欢迎回来</p>
+              </div>
+              <div className="w-full pt-4 border-t border-zinc-100 dark:border-zinc-800">
+                <p className="text-xs text-zinc-400">OpenID: {user.open_id}</p>
+              </div>
+            </div>
+          ) : (
+            <p className="text-zinc-500">正在尝试免登录...</p>
+          )}
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
+
+        <p className="text-sm text-zinc-400 mt-4">
+          AI Agent Infrastructure Platform
+        </p>
       </main>
     </div>
   );
