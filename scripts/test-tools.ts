@@ -32,7 +32,7 @@ async function testToolCalling() {
   ];
 
   // 尝试使用不同的厂商进行测试
-  const provider = 'deepseek'; // 或者 'doubao'
+  const provider = 'doubao'; // 或者 'doubao'
 
   console.log(`--- 测试厂商: ${provider} ---`);
   try {
