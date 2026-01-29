@@ -5,9 +5,16 @@
 
 export type MessageRole = 'system' | 'user' | 'assistant' | 'tool';
 
+/**
+ * 多模态消息内容部分
+ */
+export type MessageContentPart = 
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string; detail?: 'low' | 'high' | 'auto' } };
+
 export interface ChatMessage {
   role: MessageRole;
-  content: string | null;
+  content: string | MessageContentPart[] | null;
   /** 用于 assistant 角色：模型生成的工具调用请求 */
   tool_calls?: any[];
   /** 用于 tool 角色：对应 tool_call 的 ID */
