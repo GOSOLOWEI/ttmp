@@ -4,7 +4,7 @@
  */
 
 import type { ChatMessage } from '@/lib/models';
-import type { PromptConfig, PromptVariables, BuiltPrompt, MessageTemplate } from './types';
+import type { PromptConfig, PromptVariables, BuiltPrompt } from './types';
 import type { InjectionConfig } from './injector';
 import { formatTemplate } from './template';
 import { ContextInjector } from './injector';
@@ -56,24 +56,45 @@ export function buildPrompt(
 }
 
 /**
- * 构建 Prompt（支持动态背景信息注入）
+ * 构建 Prompt（支持并发动态背景信息注入）
  */
 export async function buildPromptWithContext(
   config: PromptConfig,
   variables: PromptVariables = {},
   injections: InjectionConfig[] = []
 ): Promise<BuiltPrompt> {
-  // 1. 先构建基础 messages（不含注入）
-  const baseMessages = buildPrompt(config, variables).messages;
+  // 1. 并发获取所有注入内容
+  const injectionPromises = injections.map(async (injection) => {
+    const content = await ContextInjector.fetchContent(injection, variables);
+    return { injection, content };
+  });
 
-  // 2. 依次应用所有注入器
-  let messages = baseMessages;
-  for (const injection of injections) {
-    messages = await ContextInjector.inject(messages, injection, variables);
+  const results = await Promise.all(injectionPromises);
+
+  // 2. 区分注入类型
+  const templateVariables: Record<string, string> = {};
+  const messageInjections: Array<{ strategy: any; content: string }> = [];
+
+  for (const { injection, content } of results) {
+    if (!content) continue;
+
+    if (injection.strategy === 'template-variable') {
+      const varName = injection.variableName || 'context';
+      templateVariables[varName] = content;
+    } else {
+      messageInjections.push({ strategy: injection.strategy, content: content });
+    }
   }
+
+  // 3. 将模板类注入合并到变量中，构建基础消息
+  const mergedVariables = { ...variables, ...templateVariables };
+  let { messages, options } = buildPrompt(config, mergedVariables);
+
+  // 4. 应用非模板类消息注入策略（此时变量已渲染完毕）
+  messages = ContextInjector.applyStrategies(messages, messageInjections);
 
   return {
     messages,
-    options: config.defaultOptions,
+    options,
   };
 }

@@ -25,6 +25,8 @@ export interface InjectionConfig {
   strategy: InjectionStrategy;
   /** 模板（用于格式化注入内容） */
   template?: string; // 如 "相关背景信息：\n{{content}}\n"
+  /** 模板变量名（仅用于 strategy 为 template-variable 时，默认为 context） */
+  variableName?: string;
   /** 查询参数构建器（从 variables 生成查询字符串） */
   queryBuilder?: (variables: PromptVariables) => string;
   /** 选项（传给 dataSource.fetch） */
@@ -36,25 +38,30 @@ export interface InjectionConfig {
 }
 
 /**
+ * 注入结果
+ */
+export interface InjectionResult {
+  messages?: ChatMessage[];
+  variable?: { name: string; value: string };
+}
+
+/**
  * 注入器：将数据源的结果注入到 messages 中
  */
 export class ContextInjector {
   private static cache = new Map<string, { data: DataSourceResult[]; expires: number }>();
 
   /**
-   * 注入背景信息到 messages
+   * 获取注入内容（不直接应用策略）
    */
-  static async inject(
-    messages: ChatMessage[],
+  static async fetchContent(
     config: InjectionConfig,
     variables: PromptVariables = {}
-  ): Promise<ChatMessage[]> {
-    // 1. 获取查询字符串
+  ): Promise<string | null> {
     const query = config.queryBuilder
       ? config.queryBuilder(variables)
       : (variables.query as string) || (variables.text as string) || '';
 
-    // 2. 检查缓存
     const cacheKey = `${config.dataSource.id}:${query}`;
     let results: DataSourceResult[];
 
@@ -66,20 +73,57 @@ export class ContextInjector {
         results = await config.dataSource.fetch(query, config.options);
         this.cache.set(cacheKey, {
           data: results,
-          expires: Date.now() + (config.cacheTtl || 60000), // 默认 1 分钟
+          expires: Date.now() + (config.cacheTtl || 60000),
         });
       }
     } else {
       results = await config.dataSource.fetch(query, config.options);
     }
 
-    if (results.length === 0) return messages; // 无数据则不注入
+    if (results.length === 0) return null;
 
-    // 3. 格式化数据
-    const formattedContent = this.formatResults(results, config.template);
+    return this.formatResults(results, config.template);
+  }
 
-    // 4. 按策略注入
-    return this.applyStrategy(messages, formattedContent, config.strategy);
+  /**
+   * 批量应用消息注入策略
+   */
+  static applyStrategies(
+    messages: ChatMessage[],
+    injections: Array<{ strategy: InjectionStrategy; content: string }>
+  ): ChatMessage[] {
+    let result = [...messages];
+    for (const inj of injections) {
+      if (inj.strategy === 'template-variable') continue;
+      result = this.applyStrategy(result, inj.content, inj.strategy);
+    }
+    return result;
+  }
+
+  /**
+   * 注入背景信息到 messages
+   */
+  static async inject(
+    messages: ChatMessage[],
+    config: InjectionConfig,
+    variables: PromptVariables = {}
+  ): Promise<InjectionResult> {
+    const content = await this.fetchContent(config, variables);
+    if (!content) return { messages };
+
+    if (config.strategy === 'template-variable') {
+      return {
+        messages,
+        variable: {
+          name: config.variableName || 'context',
+          value: content,
+        },
+      };
+    }
+
+    return {
+      messages: this.applyStrategy(messages, content, config.strategy),
+    };
   }
 
   private static formatResults(
@@ -101,7 +145,7 @@ export class ContextInjector {
     switch (strategy) {
       case 'prepend-system':
         if (newMessages[0]?.role === 'system') {
-          newMessages[0].content = `${content}\n\n${newMessages[0].content}`;
+          newMessages[0] = { ...newMessages[0], content: `${content}\n\n${newMessages[0].content}` };
         } else {
           newMessages.unshift({ role: 'system', content });
         }
@@ -109,7 +153,7 @@ export class ContextInjector {
 
       case 'append-system':
         if (newMessages[0]?.role === 'system') {
-          newMessages[0].content = `${newMessages[0].content}\n\n${content}`;
+          newMessages[0] = { ...newMessages[0], content: `${newMessages[0].content}\n\n${content}` };
         } else {
           newMessages.unshift({ role: 'system', content });
         }
@@ -118,25 +162,26 @@ export class ContextInjector {
       case 'prepend-user':
         const lastUserIndex = newMessages.length - 1;
         if (newMessages[lastUserIndex]?.role === 'user') {
-          newMessages[lastUserIndex].content = `${content}\n\n${newMessages[lastUserIndex].content}`;
+          newMessages[lastUserIndex] = { 
+            ...newMessages[lastUserIndex], 
+            content: `${content}\n\n${newMessages[lastUserIndex].content}` 
+          };
         }
         break;
 
       case 'append-user':
         const lastUserIdx = newMessages.length - 1;
         if (newMessages[lastUserIdx]?.role === 'user') {
-          newMessages[lastUserIdx].content = `${newMessages[lastUserIdx].content}\n\n${content}`;
+          newMessages[lastUserIdx] = { 
+            ...newMessages[lastUserIdx], 
+            content: `${newMessages[lastUserIdx].content}\n\n${content}` 
+          };
         }
         break;
 
       case 'separate-message':
-        // 在最后一个 user message 之前插入
         const insertIndex = newMessages.length - 1;
         newMessages.splice(insertIndex, 0, { role: 'user', content });
-        break;
-
-      case 'template-variable':
-        // 这个需要在 buildPrompt 阶段处理，这里不做处理
         break;
     }
 
