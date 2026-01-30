@@ -8,7 +8,7 @@
 // - idx_transaction_ai_modified    ON ((ai_metadata->>'user_modified')) WHERE ai_metadata IS NOT NULL
 
 generator client {
-  provider = "prisma-client"
+  provider = "prisma-client-js"
   output   = "../generated/prisma"
 }
 
@@ -289,6 +289,10 @@ model PrepaidExpense {
   status                PrepaidStatus @default(in_progress)
   /// 备注
   remark                String?       @db.VarChar(200)
+  /// 用户 ID（多用户预留）
+  userId                String?       @map("user_id") @db.VarChar(50)
+  /// 账本 ID（多账本预留）
+  ledgerId              String?       @map("ledger_id") @db.VarChar(50)
 
   @@map("prepaid_expenses")
 }
@@ -322,8 +326,11 @@ model Subscription {
   usageLevel       UsageLevel          @map("usage_level") @default(medium)
   /// 保留 / 观察 / 取消
   decision         SubscriptionDecision @default(watch)
+  /// 用户 ID
+  userId           String?              @map("user_id") @db.VarChar(50)
 
   @@index([isActive, startDate])
+  @@index([userId])
   @@map("subscriptions")
 }
 
@@ -347,6 +354,7 @@ model Tag {
   /// 是否启用
   isActive    Boolean  @map("is_active") @default(true)
 
+  @@unique([tagName])
   @@map("tags")
 }
 
@@ -355,6 +363,8 @@ model Tag {
 // ---------------------------------------------------------------------------
 
 model Budget {
+  /// 用户 ID（多用户预留）
+  userId         String   @map("user_id") @db.VarChar(50)
   /// 预算业务 ID，如 BUD202401，可选
   budgetId       String?  @map("budget_id") @db.VarChar(50)
   /// 预算月份，如 2024-01
@@ -368,8 +378,8 @@ model Budget {
   /// 预算说明，如 控制外卖
   remark         String?  @db.VarChar(200)
 
-  @@id([month, level1Category, level2Category])
-  @@index([month])
+  @@id([month, level1Category, level2Category, userId])
+  @@index([month, userId])
   @@map("budgets")
 }
 
@@ -434,6 +444,8 @@ model FinancialGoal {
   priority      Int        @default(0)
   /// 进行中 / 暂停 / 已完成
   status        GoalStatus @default(in_progress)
+  /// 用户 ID（多用户预留）
+  userId        String?    @map("user_id") @db.VarChar(50)
   /// 创建时间
   createdAt     DateTime   @default(now()) @map("created_at")
   /// 更新时间
@@ -447,8 +459,10 @@ model FinancialGoal {
 // ---------------------------------------------------------------------------
 
 model MonthlyFinancialSnapshot {
+  /// 用户 ID（多用户预留）
+  userId          String   @map("user_id") @db.VarChar(50)
   /// 月份，如 2024-01
-  month           String   @id @map("month") @db.VarChar(7)
+  month           String   @map("month") @db.VarChar(7)
   /// 当月总收入（type=收入）
   monthlyIncome   Decimal  @map("monthly_income") @db.Decimal(15, 2)
   /// 当月总消费（type=支出且 is_analysis=是，正数展示）
@@ -460,6 +474,7 @@ model MonthlyFinancialSnapshot {
   /// 更新时间
   updatedAt       DateTime @updatedAt @map("updated_at")
 
+  @@id([month, userId])
   @@map("monthly_financial_snapshots")
 }
 
@@ -468,8 +483,10 @@ model MonthlyFinancialSnapshot {
 // ---------------------------------------------------------------------------
 
 model UserHistorySummary {
+  /// 用户 ID
+  userId         String   @map("user_id") @db.VarChar(50)
   /// 时间窗口：last_30_days / last_90_days / last_12_months
-  window         String   @id @map("window") @db.VarChar(20)
+  window         String   @map("window") @db.VarChar(20)
   /// 可直接注入的摘要，≤500 字，如 过去90天共消费xxx元，较上期up/down x%，主要支出在…
   historySummary String   @map("history_summary") @db.VarChar(500)
   /// 结构化模式，可选
@@ -479,6 +496,7 @@ model UserHistorySummary {
   /// 更新时间
   updatedAt      DateTime @updatedAt @map("updated_at")
 
+  @@id([userId, window])
   @@map("user_history_summaries")
 }
 
@@ -487,6 +505,8 @@ model UserHistorySummary {
 // ---------------------------------------------------------------------------
 
 model AIStageAnalysis {
+  /// 用户 ID
+  userId         String   @map("user_id") @db.VarChar(50)
   /// 周期，如 2026-01、周
   period         String   @map("period") @db.VarChar(20)
   /// 阶段标签：稳定期/扩张期/入不敷出/冲动消费期 等
@@ -502,7 +522,7 @@ model AIStageAnalysis {
   /// 更新时间
   updatedAt      DateTime @updatedAt @map("updated_at")
 
-  @@id([period, stageLabel])
+  @@id([userId, period, stageLabel])
   @@map("ai_stage_analyses")
 }
 

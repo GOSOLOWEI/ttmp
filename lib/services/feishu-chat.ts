@@ -6,7 +6,7 @@
 import { replyMessage } from '../feishu/messages';
 import { getFeishuResourceBuffer } from '../feishu/resources';
 import { visionService } from './vision.service';
-import { modelManager } from '../models/manager';
+import { workflowService } from './workflow.service';
 
 export interface FeishuMessageContext {
   messageId: string;
@@ -34,28 +34,41 @@ export const feishuChatService = {
    * 核心业务流程编排
    */
   async processAITask(context: FeishuMessageContext) {
-    const { messageId, text, msgType, imageKey } = context;
+    const { messageId, text, msgType, imageKey, senderId } = context;
 
     try {
       // 1. 多模态：图片识别流程
       if (msgType === 'image' && imageKey) {
         await replyMessage(messageId, `⏳ 正在分析图片内容...`);
-        
-        // 调用提取出的工具和服务
         const buffer = await getFeishuResourceBuffer(messageId, imageKey, 'image');
         const analysis = await visionService.analyzeImage(buffer);
-        
         await replyMessage(messageId, `✅ 图片识别结果：\n\n${analysis}`);
         return;
       }
 
-      // 2. 文本对话流程
+      // 2. 文本对话/记账流程 (内存异步执行)
       if (msgType === 'text') {
-        const result = await modelManager.chat('doubao', [
-          { role: 'user', content: text }
-        ]);
-        const responseText = result.choices[0].message.content as string;
-        await replyMessage(messageId, responseText);
+        const result = await workflowService.executeAccountingTask({
+          text,
+          userId: senderId
+        });
+
+        await replyMessage(messageId, result.replyText || '未返回有效回复');
+
+        // 3. 处理交互式卡片 (如果回复中包含 [CARD_JSON] 标记)
+        if (result.replyText?.includes('[CARD_JSON]')) {
+          const cardMatch = result.replyText.match(/\[CARD_JSON\](.*?)\[\/CARD_JSON\]/);
+          if (cardMatch && cardMatch[1]) {
+            try {
+              const cardContent = JSON.parse(cardMatch[1]);
+              // 这里的 replyMessage 需要支持 interactive 类型，目前 messages.ts 已经支持
+              await replyMessage(messageId, cardContent, 'interactive');
+              console.log(`✅ [FeishuChat] 卡片回复已发送: ${messageId}`);
+            } catch (e) {
+              console.error(`[FeishuChatService] 解析卡片 JSON 失败:`, e);
+            }
+          }
+        }
       }
     } catch (err: any) {
       console.error(`[FeishuChatService] 流程执行失败:`, err);

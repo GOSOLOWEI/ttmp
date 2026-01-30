@@ -51,6 +51,7 @@ export function buildPrompt(
 
   return {
     messages,
+    version: config.version,
     options: config.defaultOptions,
   };
 }

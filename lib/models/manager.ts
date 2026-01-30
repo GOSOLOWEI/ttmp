@@ -111,6 +111,7 @@ export class ModelManager {
             total_tokens: response.usage.total_tokens ?? 0,
           }
         : undefined,
+      model: response.model,
     };
   }
 

@@ -36,6 +36,8 @@ export interface ChatCompletionOptions {
   tools?: any[];
   /** 工具选择策略 */
   tool_choice?: 'none' | 'auto' | 'required' | { type: 'function'; function: { name: string } };
+  /** 响应格式 */
+  response_format?: { type: 'text' | 'json_object' };
 }
 
 export interface ChatCompletionChunk {
@@ -63,6 +65,8 @@ export interface ChatCompletionResult {
     completion_tokens: number;
     total_tokens: number;
   };
+  /** 实际使用的模型 ID */
+  model?: string;
 }
 
 /** Fallback 策略选项 */
