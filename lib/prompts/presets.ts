@@ -3,6 +3,7 @@
  * 按场景组织，便于复用和统一管理
  */
 
+import { prisma } from '../prisma';
 import type { PromptConfig } from './types';
 
 /**
@@ -149,7 +150,35 @@ export const PROMPT_PRESETS: Record<string, PromptConfig> = {
 };
 
 /**
- * 获取预设配置
+ * 获取预设配置 (异步：优先从数据库获取，回退到本地预设)
+ */
+export async function getPromptConfig(presetId: string): Promise<PromptConfig | undefined> {
+  try {
+    // 1. 尝试从数据库获取标记为 isDefault 的版本
+    const record = await prisma.promptRegistry.findFirst({
+      where: { id: presetId, isDefault: true }
+    });
+
+    if (record) {
+      return {
+        id: record.id,
+        version: record.version,
+        system: record.systemTemplate || undefined,
+        user: record.userTemplate,
+        defaultOptions: record.config as any
+      };
+    }
+  } catch (error) {
+    console.error(`[PromptPresets] 从数据库获取 Prompt [${presetId}] 失败:`, error);
+  }
+
+  // 2. 数据库未命中或报错，回退到本地硬编码预设
+  return PROMPT_PRESETS[presetId];
+}
+
+/**
+ * 获取本地预设配置 (同步)
+ * @deprecated 建议优先使用异步的 getPromptConfig
  */
 export function getPreset(presetId: string): PromptConfig | undefined {
   return PROMPT_PRESETS[presetId];

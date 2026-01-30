@@ -624,3 +624,34 @@ model AIFeedbackLearning {
   @@index([patternDetected, ruleGenerated])
   @@map("ai_feedback_learnings")
 }
+
+
+
+// ---------------------------------------------------------------------------
+// 16. Prompt 注册表 (Prompt_Registry)
+// ---------------------------------------------------------------------------
+
+model PromptRegistry {
+  /// 场景 ID，如 'accounting-agent'
+  id             String   @map("id") @db.VarChar(50)
+  /// 提示词版本，如 v2.0
+  version        String   @map("version") @db.VarChar(50)
+  /// 系统提示词模板
+  systemTemplate String?  @map("system_template") @db.Text
+  /// 用户消息模板
+  userTemplate   String   @map("user_template") @db.Text
+  /// 模型配置（JSON），存储 model, temperature, response_format 等
+  config         Json?    @map("config")
+  /// 是否为该场景的默认版本
+  isDefault      Boolean  @default(false) @map("is_default")
+  /// 变更日志
+  changeLog      String?  @map("change_log") @db.Text
+  /// 创建时间
+  createdAt      DateTime @default(now()) @map("created_at")
+  /// 更新时间
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@id([id, version])
+  @@index([isDefault])
+  @@map("prompt_registry")
+}

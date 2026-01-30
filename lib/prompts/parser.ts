@@ -21,13 +21,22 @@ export function parseJSON<T>(
   }
 
   // 尝试提取 JSON（可能包含 markdown 代码块）
-  let jsonStr = content.trim();
+  let jsonStr = '';
+  if (typeof content === 'string') {
+    jsonStr = content.trim();
+  } else {
+    // 处理 MessageContentPart[]
+    jsonStr = content
+      .map((part) => (part.type === 'text' ? part.text : ''))
+      .join('')
+      .trim();
+  }
 
   // 移除 markdown 代码块标记
   if (jsonStr.startsWith('```')) {
     const lines = jsonStr.split('\n');
-    const startIndex = lines.findIndex((line) => line.includes('```'));
-    const endIndex = lines.findIndex((line, idx) => idx > startIndex && line.includes('```'));
+    const startIndex = lines.findIndex((line: string) => line.includes('```'));
+    const endIndex = lines.findIndex((line: string, idx: number) => idx > startIndex && line.includes('```'));
     if (startIndex !== -1 && endIndex !== -1) {
       jsonStr = lines.slice(startIndex + 1, endIndex).join('\n');
     }

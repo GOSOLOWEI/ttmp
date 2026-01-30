@@ -3,7 +3,7 @@
  * 职责：业务编排，连接事件处理器、资源工具与 AI 服务
  */
 
-import { replyMessage } from '../feishu/messages';
+import { replyMessage, updateMessage, FeishuMessageBuilder } from '../feishu/messages';
 import { getFeishuResourceBuffer } from '../feishu/resources';
 import { visionService } from './vision.service';
 import { workflowService } from './workflow.service';
@@ -36,43 +36,75 @@ export const feishuChatService = {
   async processAITask(context: FeishuMessageContext) {
     const { messageId, text, msgType, imageKey, senderId } = context;
 
+    // 创建初始“处理中”消息
+    let processingMsgId = '';
+    
     try {
       // 1. 多模态：图片识别流程
       if (msgType === 'image' && imageKey) {
-        await replyMessage(messageId, `⏳ 正在分析图片内容...`);
+        const initialResp = await replyMessage(
+          messageId, 
+          FeishuMessageBuilder.markdown(`⏳ 正在分析图片内容...`), 
+          'interactive'
+        );
+        processingMsgId = (initialResp as any).message_id;
+
         const buffer = await getFeishuResourceBuffer(messageId, imageKey, 'image');
         const analysis = await visionService.analyzeImage(buffer);
-        await replyMessage(messageId, `✅ 图片识别结果：\n\n${analysis}`);
+        
+        await updateMessage(
+          processingMsgId, 
+          FeishuMessageBuilder.markdown(`✅ 图片识别结果：\n\n${analysis}`)
+        );
         return;
       }
 
       // 2. 文本对话/记账流程 (内存异步执行)
       if (msgType === 'text') {
+        const initialResp = await replyMessage(
+          messageId, 
+          FeishuMessageBuilder.markdown(`⏳ 正在处理您的请求，请稍候...`), 
+          'interactive'
+        );
+        processingMsgId = (initialResp as any).message_id;
+
         const result = await workflowService.executeAccountingTask({
           text,
           userId: senderId
         });
 
-        await replyMessage(messageId, result.replyText || '未返回有效回复');
+        const replyText = result.replyText || '未返回有效回复';
 
-        // 3. 处理交互式卡片 (如果回复中包含 [CARD_JSON] 标记)
-        if (result.replyText?.includes('[CARD_JSON]')) {
-          const cardMatch = result.replyText.match(/\[CARD_JSON\](.*?)\[\/CARD_JSON\]/);
+        // 处理带有卡片 JSON 的回复
+        if (replyText.includes('[CARD_JSON]')) {
+          const cardMatch = replyText.match(/\[CARD_JSON\](.*?)\[\/CARD_JSON\]/);
           if (cardMatch && cardMatch[1]) {
             try {
               const cardContent = JSON.parse(cardMatch[1]);
-              // 这里的 replyMessage 需要支持 interactive 类型，目前 messages.ts 已经支持
-              await replyMessage(messageId, cardContent, 'interactive');
-              console.log(`✅ [FeishuChat] 卡片回复已发送: ${messageId}`);
+              await updateMessage(processingMsgId, cardContent);
+              console.log(`✅ [FeishuChat] 初始回复已更新为卡片: ${processingMsgId}`);
+              return;
             } catch (e) {
               console.error(`[FeishuChatService] 解析卡片 JSON 失败:`, e);
             }
           }
         }
+
+        // 普通文本回复也通过更新卡片来实现，保持一致性
+        await updateMessage(
+          processingMsgId, 
+          FeishuMessageBuilder.markdown(replyText)
+        );
       }
     } catch (err: any) {
       console.error(`[FeishuChatService] 流程执行失败:`, err);
-      await replyMessage(messageId, `❌ 处理失败: ${err.message}`);
+      const errorText = `❌ 处理失败: ${err.message}`;
+      
+      if (processingMsgId) {
+        await updateMessage(processingMsgId, FeishuMessageBuilder.markdown(errorText));
+      } else {
+        await replyMessage(messageId, errorText);
+      }
     }
   }
 };

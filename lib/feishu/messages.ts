@@ -135,9 +135,17 @@ export async function replyMessage(
 ) {
   const client = getFeishuClient();
 
-  const formattedContent = typeof content === 'string' && msgType === 'text'
-    ? JSON.stringify({ text: content })
-    : typeof content === 'string' ? content : JSON.stringify(content);
+  // 如果传入的是已经构建好的完整消息对象 (含有 msg_type 和 content)
+  let finalMsgType = msgType;
+  let finalContentObj = content;
+  if (typeof content === 'object' && content !== null && 'msg_type' in content && 'content' in content) {
+    finalMsgType = content.msg_type as FeishuMessageType;
+    finalContentObj = content.content;
+  }
+
+  const formattedContent = typeof finalContentObj === 'string' && finalMsgType === 'text'
+    ? JSON.stringify({ text: finalContentObj })
+    : typeof finalContentObj === 'string' ? finalContentObj : JSON.stringify(finalContentObj);
 
   return await wrapRequest(client.im.message.reply({
     path: {
@@ -145,7 +153,38 @@ export async function replyMessage(
     },
     data: {
       content: formattedContent,
-      msg_type: msgType,
+      msg_type: finalMsgType,
+    },
+  }));
+}
+
+/**
+ * 更新一条消息的内容
+ * 注意：通常仅支持交互式卡片 (interactive) 消息的更新
+ */
+export async function updateMessage(
+  messageId: string,
+  content: string | Record<string, any>,
+  msgType: FeishuMessageType = 'interactive'
+) {
+  const client = getFeishuClient();
+
+  // 如果传入的是已经构建好的完整消息对象 (含有 msg_type 和 content)
+  let finalContentObj = content;
+  if (typeof content === 'object' && content !== null && 'msg_type' in content && 'content' in content) {
+    finalContentObj = content.content;
+  }
+
+  const formattedContent = typeof finalContentObj === 'string'
+    ? finalContentObj 
+    : JSON.stringify(finalContentObj);
+
+  return await wrapRequest(client.im.message.patch({
+    path: {
+      message_id: messageId,
+    },
+    data: {
+      content: formattedContent,
     },
   }));
 }
@@ -161,9 +200,17 @@ export async function sendMessage(
 ) {
   const client = getFeishuClient();
 
-  const formattedContent = typeof content === 'string' && msgType === 'text'
-    ? JSON.stringify({ text: content })
-    : typeof content === 'string' ? content : JSON.stringify(content);
+  // 如果传入的是已经构建好的完整消息对象 (含有 msg_type 和 content)
+  let finalMsgType = msgType;
+  let finalContentObj = content;
+  if (typeof content === 'object' && content !== null && 'msg_type' in content && 'content' in content) {
+    finalMsgType = content.msg_type as FeishuMessageType;
+    finalContentObj = content.content;
+  }
+
+  const formattedContent = typeof finalContentObj === 'string' && finalMsgType === 'text'
+    ? JSON.stringify({ text: finalContentObj })
+    : typeof finalContentObj === 'string' ? finalContentObj : JSON.stringify(finalContentObj);
 
   return await wrapRequest(client.im.message.create({
     params: {
@@ -172,7 +219,7 @@ export async function sendMessage(
     data: {
       receive_id: receiveId,
       content: formattedContent,
-      msg_type: msgType,
+      msg_type: finalMsgType,
     },
   }));
 }

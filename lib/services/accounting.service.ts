@@ -1,7 +1,7 @@
 import { prisma } from '../prisma';
 import { tagService } from './tag.service';
 import { modelManager } from '../models/manager';
-import { buildPrompt, getPreset } from '../prompts';
+import { buildPrompt, getPromptConfig } from '../prompts';
 import { 
   TransactionType, 
   PaymentChannel, 
@@ -777,7 +777,7 @@ export const accountingService = {
     ]);
 
     // 3. 调用 AI 生成解读
-    const config = getPreset('financial-analyst');
+    const config = await getPromptConfig('financial-analyst');
     if (!config) throw new Error('未找到分析助手预设 [financial-analyst]');
 
     const statsText = `
@@ -894,7 +894,7 @@ export const accountingService = {
     }
 
     // 2. 调用 AI 进行诊断
-    const config = getPreset('stage-analyst');
+    const config = await getPromptConfig('stage-analyst');
     if (!config) throw new Error('未找到阶段分析预设 [stage-analyst]');
 
     const snapshotText = `

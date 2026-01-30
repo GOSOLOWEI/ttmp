@@ -5,7 +5,7 @@
 
 export { formatTemplate, formatTemplates } from './template';
 export { buildPrompt, buildPromptWithContext } from './builder';
-export { PROMPT_PRESETS, getPreset, listPresets } from './presets';
+export { PROMPT_PRESETS, getPreset, getPromptConfig, listPresets } from './presets';
 export { ContextInjector } from './injector';
 export { parseJSON, safeParseJSON, parseStreamJSON } from './parser';
 export type {

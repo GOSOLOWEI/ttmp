@@ -4,7 +4,7 @@
  */
 
 import { modelManager } from '../models/manager';
-import { buildPrompt, getPreset } from '../prompts';
+import { buildPrompt, getPromptConfig } from '../prompts';
 import { prisma } from '../prisma';
 import { contextService } from './context.service';
 import { 
@@ -53,7 +53,7 @@ export const workflowService = {
     const contextData = await contextService.getAccountingContext(userId);
 
     // 2. 构建 Prompt
-    const config = getPreset('accounting-agent');
+    const config = await getPromptConfig('accounting-agent');
     if (!config) {
       throw new Error('未找到记账助手预设配置 [accounting-agent]');
     }
