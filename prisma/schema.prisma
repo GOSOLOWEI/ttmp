@@ -1,0 +1,606 @@
+// PRDv1.3 个人记账分析系统 · Prisma 模型
+// 生成后勿直接执行 migrate/push，请先核对再执行。
+//
+// 部分索引（需在迁移中 raw SQL 建立）：
+// - idx_transaction_account_date   WHERE account_name IS NOT NULL
+// - idx_transaction_source         WHERE source_id IS NOT NULL
+// - idx_ai_log_user_action         WHERE user_action IS NOT NULL
+// - idx_transaction_ai_modified    ON ((ai_metadata->>'user_modified')) WHERE ai_metadata IS NOT NULL
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// 枚举（对应 PRD 第 9 节）
+// ---------------------------------------------------------------------------
+
+enum TransactionType {
+  income       // 收入
+  expense      // 支出
+  asset_change // 资产变动（仅大额预付付款当下）
+}
+
+enum PaymentChannel {
+  cash         // 现金
+  wechat       // 微信
+  alipay       // 支付宝
+  bank_card    // 银行卡
+  credit_card  // 信用卡
+  huabei       // 花呗
+  other        // 其他
+}
+
+enum SourceType {
+  manual             // 手工录入
+  ai_generated       // AI 生成
+  subscription       // 订阅扣款
+  prepaid_payment    // 预付付款（付款当下）
+  prepaid_amortization // 预付摊销（每月一笔）
+}
+
+enum AccountType {
+  cash         // 现金
+  savings      // 储蓄
+  credit_card  // 信用卡
+  investment   // 投资
+  e_wallet     // 电子钱包（微信/支付宝余额）
+}
+
+enum PrepaidStatus {
+  in_progress // 进行中
+  completed   // 已完成
+}
+
+enum BillingCycle {
+  monthly // 月付
+  yearly  // 年付
+}
+
+enum UsageLevel {
+  low     // 低
+  medium  // 中
+  high    // 高
+}
+
+enum SubscriptionDecision {
+  keep   // 保留
+  watch  // 观察
+  cancel // 取消
+}
+
+enum TagType {
+  psychological // 心理
+  goal          // 目标
+  risk          // 风险
+}
+
+enum Scenario {
+  tagging          // 记账打标
+  report           // 报告生成
+  stage_analysis   // 阶段分析
+  subscription_opt // 订阅优化
+  budget_advice    // 预算建议
+}
+
+enum UserAction {
+  accepted  // 用户直接接受，未修改
+  modified  // 用户修改了部分字段
+  rejected  // 用户删除了流水
+  pending   // 待用户确认（低置信度）
+}
+
+enum FeedbackType {
+  field_change       // 字段修改
+  tag_change         // 标签修改
+  category_change    // 分类修改
+  delete_transaction // 删除流水
+}
+
+enum TaggingRuleScope {
+  tagging_only // 记账打标
+  report_only  // 报告解读
+  both         // 两者
+}
+
+enum TaggingRuleStatus {
+  enabled   // 启用
+  disabled  // 停用
+}
+
+enum TaggingRuleSource {
+  manual       // 手工
+  ai_generated // AI 生成
+  from_history // 从历史提炼
+}
+
+enum GoalType {
+  save_money      // 存钱
+  repay_debt      // 还债
+  control_expense // 控支出
+  increase_income // 提升收入
+  other           // 其他
+}
+
+enum GoalStatus {
+  in_progress  // 进行中
+  paused       // 暂停
+  completed    // 已完成
+}
+
+enum StageLabel {
+  stable          // 稳定期
+  expansion       // 扩张期
+  contraction     // 收缩期
+  volatile        // 波动期
+  deficit         // 入不敷出
+  balanced        // 平衡
+  slight_surplus  // 略有结余
+  rapid_buildup   // 快速积累
+  impulsive       // 冲动消费期
+  rational_control // 理性控制期
+  goal_oriented   // 目标导向期
+}
+
+enum InputType {
+  text            // 纯文本
+  image           // 图片
+  text_and_image  // 文本 + 图片
+}
+
+enum LogStatus {
+  success  // 成功
+  fail     // 失败
+}
+
+// ---------------------------------------------------------------------------
+// 1. 记账流水表（Transaction）PRD §1
+// ---------------------------------------------------------------------------
+
+model Transaction {
+  /// 流水唯一标识，如 TX20240115001
+  transactionId   String          @id @map("transaction_id") @db.VarChar(50)
+  /// 资金实际发生日期（业务日期，用于月度统计）
+  date            DateTime        @db.Date
+  /// 交易类型：收入 / 支出 / 资产变动
+  type            TransactionType
+  /// 一级分类（应用层校验与 Category 一致）
+  level1Category  String          @map("level1_category") @db.VarChar(50)
+  /// 二级分类（应用层校验与 Category 一致）
+  level2Category  String          @map("level2_category") @db.VarChar(50)
+  /// 金额：收入为正、支出为负；不允许为 0
+  amount          Decimal         @db.Decimal(15, 2)
+  /// 支付渠道（必填）
+  paymentChannel  PaymentChannel  @map("payment_channel")
+  /// 具体账户名，可空，可后补（轻账户）
+  accountName     String?         @map("account_name") @db.VarChar(100)
+  /// 标签，JSON 数组如 ["工作","计划内"]，可空
+  tags            Json?
+  /// 备注 / 摘要
+  description     String?         @db.VarChar(200)
+  /// 是否计入消费分析 / 预算执行口径
+  isAnalysis      Boolean         @map("is_analysis") @default(true)
+  /// 来源类型：手工 / AI 生成 / 订阅 / 预付付款 / 预付摊销
+  sourceType      SourceType      @map("source_type") @default(manual)
+  /// 来源关联 ID，如 log_id、SUB001、PRE202401
+  sourceId        String?         @map("source_id") @db.VarChar(50)
+  /// AI 决策元数据（log_id、confidence、reasons、risk_flags、user_modified 等）
+  aiMetadata      Json?           @map("ai_metadata")
+  /// 用户 ID（多用户预留）
+  userId          String?         @map("user_id") @db.VarChar(50)
+  /// 账本 ID（多账本预留）
+  ledgerId        String?         @map("ledger_id") @db.VarChar(50)
+  /// 记录创建时间
+  createdAt       DateTime        @default(now()) @map("created_at")
+  /// 最后修改时间
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+
+  @@index([date])
+  @@index([type, isAnalysis, date])
+  @@index([level1Category, level2Category, date])
+  @@index([paymentChannel, date])
+  @@index([accountName, date])
+  @@index([sourceType, sourceId])
+  @@map("transactions")
+}
+
+// ---------------------------------------------------------------------------
+// 2. 分类维表（Category）PRD §2
+// ---------------------------------------------------------------------------
+
+model Category {
+  /// 一级分类唯一名称
+  level1Category     String    @map("level1_category") @db.VarChar(50)
+  /// 二级分类（在一级下唯一）
+  level2Category     String    @map("level2_category") @db.VarChar(50)
+  /// 默认交易类型（收入 / 支出 / 资产变动）
+  defaultType        TransactionType @map("default_type")
+  /// 默认是否计入分析
+  defaultIsAnalysis  Boolean   @map("default_is_analysis") @default(true)
+  /// 使用次数统计，用于 AI 推荐排序
+  usageCount         Int       @map("usage_count") @default(0)
+  /// 最后使用时间，识别僵尸分类
+  lastUsedAt         DateTime? @map("last_used_at")
+  /// 是否启用（历史保留，新流水不推荐）
+  isActive           Boolean   @map("is_active") @default(true)
+  /// 分类说明
+  remark             String?   @db.VarChar(200)
+
+  @@id([level1Category, level2Category])
+  @@map("categories")
+}
+
+// ---------------------------------------------------------------------------
+// 3. 账户表（Account）PRD §3，轻账户可选
+// ---------------------------------------------------------------------------
+
+model Account {
+  /// 账户名称（唯一），如 招商信用卡、建行储蓄卡
+  accountName    String   @id @map("account_name") @db.VarChar(100)
+  /// 账户类型：现金 / 储蓄 / 信用卡 / 投资 / 电子钱包
+  accountType    AccountType @map("account_type")
+  /// 初始余额，NOT NULL 默认 0；不知则填 0 后续校准
+  openingBalance Decimal  @map("opening_balance") @db.Decimal(15, 2) @default(0)
+  /// 是否计入净资产
+  isAsset        Boolean  @map("is_asset") @default(true)
+  /// 账户说明
+  remark         String?  @db.VarChar(200)
+
+  @@map("accounts")
+}
+
+// ---------------------------------------------------------------------------
+// 4. 预付费用表（Prepaid_Expense）PRD §4
+// ---------------------------------------------------------------------------
+
+model PrepaidExpense {
+  /// 预付事项 ID，如 PRE202401
+  prepaidId             String        @id @map("prepaid_id") @db.VarChar(50)
+  /// 预付事项名称，如 2024 年房租
+  expenseName           String        @map("expense_name") @db.VarChar(100)
+  /// 最终计入消费的一级分类
+  level1Category        String        @map("level1_category") @db.VarChar(50)
+  /// 最终计入消费的二级分类
+  level2Category        String        @map("level2_category") @db.VarChar(50)
+  /// 预付总金额（正数）
+  totalAmount           Decimal       @map("total_amount") @db.Decimal(15, 2)
+  /// 开始摊销月份，如 2024-01
+  startMonth            String        @map("start_month") @db.VarChar(7)
+  /// 结束摊销月份，如 2024-12
+  endMonth              String        @map("end_month") @db.VarChar(7)
+  /// 总摊销月数
+  months                Int
+  /// 每月摊销金额（尾差在最后一月补齐）
+  monthlyAmount         Decimal       @map("monthly_amount") @db.Decimal(15, 2)
+  /// 付款渠道（轻账户必填）
+  paymentChannel        PaymentChannel @map("payment_channel")
+  /// 付款账户，可空
+  accountName           String?       @map("account_name") @db.VarChar(100)
+  /// 付款流水 ID，关联 Transaction
+  paymentTransactionId  String?       @map("payment_transaction_id") @db.VarChar(50)
+  /// 已摊销到哪个月，避免重复生成
+  lastAmortizedMonth    String?       @map("last_amortized_month") @db.VarChar(7)
+  /// 进行中 / 已完成
+  status                PrepaidStatus @default(in_progress)
+  /// 备注
+  remark                String?       @db.VarChar(200)
+
+  @@map("prepaid_expenses")
+}
+
+// ---------------------------------------------------------------------------
+// 5. 订阅表（Subscription）PRD §5
+// ---------------------------------------------------------------------------
+
+model Subscription {
+  /// 订阅 ID，如 SUB001
+  subscriptionId   String              @id @map("subscription_id") @db.VarChar(50)
+  /// 服务名称，如 Spotify
+  subscriptionName String              @map("subscription_name") @db.VarChar(100)
+  /// 一级分类
+  level1Category   String              @map("level1_category") @db.VarChar(50)
+  /// 二级分类
+  level2Category   String              @map("level2_category") @db.VarChar(50)
+  /// 月付 / 年付
+  billingCycle     BillingCycle        @map("billing_cycle")
+  /// 单期扣款金额（正数）
+  amount           Decimal             @db.Decimal(15, 2)
+  /// 扣款渠道
+  paymentChannel   PaymentChannel      @map("payment_channel")
+  /// 开始日期
+  startDate        DateTime            @map("start_date") @db.Date
+  /// 自动续费规则描述，如 每月 10 号
+  renewalRule      String?             @map("renewal_rule") @db.VarChar(100)
+  /// 是否启用
+  isActive         Boolean             @map("is_active") @default(true)
+  /// 使用频率：低 / 中 / 高
+  usageLevel       UsageLevel          @map("usage_level") @default(medium)
+  /// 保留 / 观察 / 取消
+  decision         SubscriptionDecision @default(watch)
+
+  @@index([isActive, startDate])
+  @@map("subscriptions")
+}
+
+// ---------------------------------------------------------------------------
+// 6. 标签表（Tag）PRD §6，可选治理
+// ---------------------------------------------------------------------------
+
+model Tag {
+  /// 标签 ID，如 TAG001
+  tagId       String   @id @map("tag_id") @db.VarChar(50)
+  /// 标签名，如 冲动消费
+  tagName     String   @map("tag_name") @db.VarChar(50)
+  /// 心理 / 目标 / 风险
+  tagType     TagType  @map("tag_type")
+  /// 标签说明
+  description String?  @db.VarChar(200)
+  /// 使用次数，用于 AI 推荐
+  usageCount  Int      @map("usage_count") @default(0)
+  /// 最后使用时间
+  lastUsedAt  DateTime? @map("last_used_at")
+  /// 是否启用
+  isActive    Boolean  @map("is_active") @default(true)
+
+  @@map("tags")
+}
+
+// ---------------------------------------------------------------------------
+// 7. 预算表（Budget）PRD §7
+// ---------------------------------------------------------------------------
+
+model Budget {
+  /// 预算业务 ID，如 BUD202401，可选
+  budgetId       String?  @map("budget_id") @db.VarChar(50)
+  /// 预算月份，如 2024-01
+  month          String   @map("month") @db.VarChar(7)
+  /// 一级分类
+  level1Category String   @map("level1_category") @db.VarChar(50)
+  /// 二级分类
+  level2Category String   @map("level2_category") @db.VarChar(50)
+  /// 预算金额（正数）
+  budgetAmount   Decimal  @map("budget_amount") @db.Decimal(15, 2)
+  /// 预算说明，如 控制外卖
+  remark         String?  @db.VarChar(200)
+
+  @@id([month, level1Category, level2Category])
+  @@index([month])
+  @@map("budgets")
+}
+
+// ---------------------------------------------------------------------------
+// 12.1 个人规则库（Tagging_Rules）PRD §12.1
+// ---------------------------------------------------------------------------
+
+model TaggingRule {
+  /// 规则 ID，如 R001
+  ruleId         String            @id @map("rule_id") @db.VarChar(50)
+  /// 规则名，如 夜宵默认冲动
+  ruleName       String            @map("rule_name") @db.VarChar(100)
+  /// 条件自然语言，AI 可解析，如 时间23:00-02:00 且 分类=餐饮
+  conditionText  String            @map("condition_text") @db.Text
+  /// 建议标签，JSON 数组如 ["冲动消费","熬夜"]
+  suggestedTags  String            @map("suggested_tags") @db.Text
+  /// 建议二级分类，可选
+  suggestedLevel2 String?          @map("suggested_level2") @db.VarChar(50)
+  /// 优先级，越高越先匹配
+  priority       Int               @default(0)
+  /// 记账打标 / 报告解读 / 两者
+  scope          TaggingRuleScope  @default(tagging_only)
+  /// 启用 / 停用
+  status         TaggingRuleStatus @default(enabled)
+  /// 手工 / AI 生成 / 从历史提炼
+  source         TaggingRuleSource @default(manual)
+  /// 命中次数统计
+  hitCount       Int               @map("hit_count") @default(0)
+  /// 用户接受（未修改）次数
+  acceptCount    Int               @map("accept_count") @default(0)
+  /// 接受率 = accept_count / hit_count
+  acceptRate     Decimal?          @map("accept_rate") @db.Decimal(5, 2)
+  /// 最后命中时间
+  lastHitAt      DateTime?         @map("last_hit_at")
+  /// 创建时间
+  createdAt      DateTime          @default(now()) @map("created_at")
+  /// 更新时间
+  updatedAt      DateTime          @updatedAt @map("updated_at")
+
+  @@index([status, priority])
+  @@map("tagging_rules")
+}
+
+// ---------------------------------------------------------------------------
+// 12.2 用户财务目标（Financial_Goal）PRD §12.2
+// ---------------------------------------------------------------------------
+
+model FinancialGoal {
+  /// 目标 ID，如 G202601
+  goalId        String     @id @map("goal_id") @db.VarChar(50)
+  /// 自然语言目标，可直接注入 Prompt，如 每月存下3000，应急金到3万
+  goalText      String     @map("goal_text") @db.Text
+  /// 存钱 / 还债 / 控支出 / 提升收入 / 其他
+  goalType      GoalType   @map("goal_type")
+  /// 目标金额，可选
+  targetAmount  Decimal?   @map("target_amount") @db.Decimal(15, 2)
+  /// 当前完成金额，可选；进度 = current_amount / target_amount
+  currentAmount Decimal?   @map("current_amount") @db.Decimal(15, 2)
+  /// 目标日期，可选
+  targetDate    DateTime?  @map("target_date") @db.Date
+  /// 优先级
+  priority      Int        @default(0)
+  /// 进行中 / 暂停 / 已完成
+  status        GoalStatus @default(in_progress)
+  /// 创建时间
+  createdAt     DateTime   @default(now()) @map("created_at")
+  /// 更新时间
+  updatedAt     DateTime   @updatedAt @map("updated_at")
+
+  @@map("financial_goals")
+}
+
+// ---------------------------------------------------------------------------
+// 12.3 当月财务快照（Monthly_Financial_Snapshot）PRD §12.3
+// ---------------------------------------------------------------------------
+
+model MonthlyFinancialSnapshot {
+  /// 月份，如 2024-01
+  month           String   @id @map("month") @db.VarChar(7)
+  /// 当月总收入（type=收入）
+  monthlyIncome   Decimal  @map("monthly_income") @db.Decimal(15, 2)
+  /// 当月总消费（type=支出且 is_analysis=是，正数展示）
+  monthlyExpense  Decimal  @map("monthly_expense") @db.Decimal(15, 2)
+  /// 净现金流 = 收入 - 消费
+  netCashflow     Decimal  @map("net_cashflow") @db.Decimal(15, 2)
+  /// Top3 分类摘要，可注入 Prompt，如 生活支出(3200元/40%)、交通(1500元/19%)
+  topCategories   String?  @map("top_categories") @db.Text
+  /// 更新时间
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@map("monthly_financial_snapshots")
+}
+
+// ---------------------------------------------------------------------------
+// 12.4 历史消费行为摘要（User_History_Summary）PRD §12.4
+// ---------------------------------------------------------------------------
+
+model UserHistorySummary {
+  /// 时间窗口：last_30_days / last_90_days / last_12_months
+  window         String   @id @map("window") @db.VarChar(20)
+  /// 可直接注入的摘要，≤500 字，如 过去90天共消费xxx元，较上期up/down x%，主要支出在…
+  historySummary String   @map("history_summary") @db.VarChar(500)
+  /// 结构化模式，可选
+  keyPatterns    String?  @map("key_patterns") @db.Text
+  /// 异常 / 风险点，可选
+  anomalies      String?  @db.Text
+  /// 更新时间
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@map("user_history_summaries")
+}
+
+// ---------------------------------------------------------------------------
+// 12.5 AI 阶段分析（AI_Stage_Analysis）PRD §12.5
+// ---------------------------------------------------------------------------
+
+model AIStageAnalysis {
+  /// 周期，如 2026-01、周
+  period         String   @map("period") @db.VarChar(20)
+  /// 阶段标签：稳定期/扩张期/入不敷出/冲动消费期 等
+  stageLabel     StageLabel @map("stage_label")
+  /// 可直接注入的分析文本
+  stageAnalysis  String   @map("stage_analysis") @db.Text
+  /// 建议清单，可选
+  recommendations String? @db.Text
+  /// 置信度，可选
+  confidence     Decimal? @db.Decimal(3, 2)
+  /// 模型 / 提示词版本，可选
+  modelVersion   String?  @map("model_version") @db.VarChar(50)
+  /// 更新时间
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@id([period, stageLabel])
+  @@map("ai_stage_analyses")
+}
+
+// ---------------------------------------------------------------------------
+// 14. AI 生成审计日志（AI_Generation_Log）PRD §14
+// ---------------------------------------------------------------------------
+
+model AIGenerationLog {
+  /// 日志 ID，如 L202601280001
+  logId             String     @id @map("log_id") @db.VarChar(50)
+  /// 生成时间
+  createdAt         DateTime   @default(now()) @map("created_at")
+  /// 用户 ID，可选
+  userId            String?    @map("user_id") @db.VarChar(50)
+  /// 场景：记账打标 / 报告生成 / 阶段分析 / 订阅优化 / 预算建议
+  scenario          Scenario
+  /// 输入类型：text / image / text_and_image
+  inputType         InputType  @map("input_type") @default(text)
+  /// 用户原始文本，如 瑞幸 35
+  inputText         String?    @map("input_text") @db.Text
+  /// 图片存储引用，可选
+  inputImageUri     String?    @map("input_image_uri") @db.VarChar(200)
+  /// OCR 识别文本，可选
+  ocrText           String?    @map("ocr_text") @db.Text
+  /// OCR 引擎，如 paddleocr
+  ocrEngine         String?    @map("ocr_engine") @db.VarChar(50)
+  /// OCR 版本
+  ocrVersion        String?    @map("ocr_version") @db.VarChar(20)
+  /// 注入快照月份，如 2026-01
+  contextMonth      String?    @map("context_month") @db.VarChar(7)
+  /// 背景引用，如 last_90_days; G202601
+  snapshotRefs      String?    @map("snapshot_refs") @db.Text
+  /// 命中规则 ID 列表，如 R001,R008
+  taggingRulesUsed  String?    @map("tagging_rules_used") @db.Text
+  /// 提示词版本
+  promptVersion     String?    @map("prompt_version") @db.VarChar(50)
+  /// 模型名称
+  modelName         String?    @map("model_name") @db.VarChar(50)
+  /// 模型版本 / 快照
+  modelVersion      String?    @map("model_version") @db.VarChar(50)
+  /// 模型原始输出
+  outputRaw         String?    @map("output_raw") @db.Text
+  /// 解析后结构化结果
+  outputParsed      String?    @map("output_parsed") @db.Text
+  /// 置信度
+  confidence        Decimal?   @db.Decimal(3, 2)
+  /// 风险标记，如 ambiguous_date; low_confidence
+  riskFlags         String?    @map("risk_flags") @db.Text
+  /// success / fail
+  status            LogStatus  @default(success)
+  /// 失败时错误信息
+  errorMessage      String?    @map("error_message") @db.Text
+  /// 耗时（毫秒）
+  latencyMs         Int?       @map("latency_ms")
+  /// Token 用量
+  tokenUsage        Int?       @map("token_usage")
+  /// 生成的流水 ID 列表，JSON 数组如 ["TX001","TX002"]
+  transactionIds    String?    @map("transaction_ids") @db.Text
+  /// 用户操作：accepted / modified / rejected / pending
+  userAction        UserAction? @map("user_action")
+  /// 用户修改了哪些字段，如 {"TX001":["level2_category","tags"]}
+  modifiedFields    Json?      @map("modified_fields")
+  /// 用户反馈时间
+  feedbackTime      DateTime?  @map("feedback_time")
+
+  @@index([scenario, createdAt])
+  @@index([userAction])
+  @@map("ai_generation_logs")
+}
+
+// ---------------------------------------------------------------------------
+// 15. AI 反馈学习（AI_Feedback_Learning）PRD §15.1
+// ---------------------------------------------------------------------------
+
+model AIFeedbackLearning {
+  /// 反馈 ID
+  feedbackId       String       @id @map("feedback_id") @db.VarChar(50)
+  /// 关联 AI_Generation_Log.log_id
+  logId            String       @map("log_id") @db.VarChar(50)
+  /// 关联 Transaction.transaction_id
+  transactionId    String       @map("transaction_id") @db.VarChar(50)
+  /// 字段修改 / 标签修改 / 分类修改 / 删除流水
+  feedbackType     FeedbackType @map("feedback_type")
+  /// 修改的字段名
+  fieldName        String?      @map("field_name") @db.VarChar(50)
+  /// AI 原始值
+  originalValue    String?      @map("original_value") @db.Text
+  /// 用户修改后的值
+  userValue        String?      @map("user_value") @db.Text
+  /// 是否检测到可提炼模式
+  patternDetected  Boolean      @map("pattern_detected") @default(false)
+  /// 是否已生成新规则
+  ruleGenerated    Boolean      @map("rule_generated") @default(false)
+  /// 生成的规则 ID，如 R123
+  generatedRuleId  String?      @map("generated_rule_id") @db.VarChar(50)
+  /// 反馈时间
+  createdAt        DateTime     @default(now()) @map("created_at")
+
+  @@index([patternDetected, ruleGenerated])
+  @@map("ai_feedback_learnings")
+}
