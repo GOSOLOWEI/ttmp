@@ -250,9 +250,9 @@ export default function PrepaidExpensesPage() {
     setIsDialogOpen(true);
   }, [form]);
 
-  // 计算月数和月摊销金额
+  // 计算月数
   const calculateMonths = useCallback((startMonth: string, endMonth: string) => {
-    if (!startMonth || !endMonth) return { months: 0, monthlyAmount: 0 };
+    if (!startMonth || !endMonth) return 0;
     const start = new Date(startMonth + "-01");
     const end = new Date(endMonth + "-01");
     const months = (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth()) + 1;

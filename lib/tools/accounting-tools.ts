@@ -1,4 +1,5 @@
 import { accountingService } from '../services/accounting.service';
+import { prisma } from '../prisma';
 import { TransactionType, PaymentChannel, SourceType, BillingCycle } from '@/generated/prisma/client';
 
 /**
@@ -390,7 +391,7 @@ export async function accountingToolDispatcher(
         };
       }
 
-      const goalLines = goals.map(g => {
+      const goalLines = goals.map((g: any) => {
         const barLength = 10;
         const filled = Math.min(barLength, Math.floor(g.progress / (100 / barLength)));
         const bar = '▓'.repeat(filled) + '░'.repeat(barLength - filled);
@@ -405,7 +406,12 @@ export async function accountingToolDispatcher(
 
     case 'query_monthly_snapshot':
       const snapshot = await prisma.monthlyFinancialSnapshot.findUnique({
-        where: { month: args.month }
+        where: { 
+          month_userId: {
+            month: args.month,
+            userId: context.userId || 'system'
+          }
+        }
       });
 
       if (!snapshot) {

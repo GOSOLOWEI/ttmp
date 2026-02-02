@@ -6,6 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "build:start": "pnpm build && pnpm start",
     "lint": "eslint",
     "db:generate": "prisma generate",
     "db:push": "dotenv -e .env -- prisma db push",
